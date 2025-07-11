@@ -30,19 +30,27 @@ st.sidebar.header("🔧 Settings")
 use_upload = st.sidebar.checkbox("Use File Uploader", value=False)
 if use_upload:
     uploaded = st.sidebar.file_uploader(
-        "Upload CRISM GeoTIFF (.img/.tif/.tiff)",
-        type=['img','tif','tiff']
+        "Upload CRISM Image (.img/.tif/.tiff)",
+        type=['img', 'tif', 'tiff']
     )
     if not uploaded:
-        st.warning("Please upload a CRISM image file.")
+        st.warning("Please upload a .img, .tif, or .tiff file.")
         st.stop()
+    # Read via MemoryFile
     memfile = MemoryFile(uploaded.read())
-    src = memfile.open()
+    try:
+        src = memfile.open()
+    except Exception as e:
+        st.error(f"Failed to open uploaded file: {e}")
+        st.stop()
 else:
-    files = [f for f in os.listdir(data_dir) if f.lower().endswith(('.img','.tif','.tiff'))]
+    files = [f for f in os.listdir(data_dir)
+             if f.lower().endswith(('.img', '.tif', '.tiff'))]
     if not files:
-        st.warning(f"No .img/.tif files found in '{data_dir}' folder.\n" +
-                   "Either upload via uploader or place file in data/.")
+        st.warning(
+            f"No .img/.tif/.tiff files found in '{data_dir}'.\n"
+            "Please upload via uploader or place file in data/."
+        )
         st.stop()
     selected = st.sidebar.selectbox("Select CRISM File", files)
     file_path = os.path.join(data_dir, selected)
@@ -68,8 +76,11 @@ alpha = st.sidebar.slider("Overlay Transparency", 0.0, 1.0, 0.5, 0.05)
 # ---------------------------------
 # Load and Validate Image
 # ---------------------------------
-img = reshape_as_image(src.read())
-src.close()
+try:
+    img = reshape_as_image(src.read())
+finally:
+    src.close()
+
 # Ensure at least 5 bands
 if img.ndim != 3 or img.shape[2] < 5:
     st.error("Image must have at least 5 bands: B, G, R, NIR, SWIR.")
@@ -88,6 +99,7 @@ def safe_div(a, b):
 water_ratio = safe_div(nir, swir)
 salt_ratio  = safe_div(swir, blue)
 
+# Habitability score [0-100]
 habit_score = (water_ratio > water_thresh).astype(float) * w_water + \
               (salt_ratio < salt_thresh).astype(float) * w_salt
 habit_pct = (habit_score * 100).astype(np.uint8)
