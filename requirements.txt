@@ -2,3 +2,5 @@ streamlit
 astropy
 numpy
 pillow
+rasterio
+matplotlib
