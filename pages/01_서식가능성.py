@@ -21,9 +21,9 @@ st.title("🌌 Mars Surface Habitability Estimator")
 st.sidebar.header("🔧 Settings")
 
 # File upload option
-enable_upload = st.sidebar.checkbox("Use File Uploader", value=False)
+enable_upload = st.sidebar.checkbox("Use File Uploader (GeoTIFF .tif)", value=False)
 
-data_dir = 'data'
+# When uploading or selecting files, only .tif/.tiff GeoTIFFs are supported
 
 # Threshold parameters
 water_thresh = st.sidebar.slider(
