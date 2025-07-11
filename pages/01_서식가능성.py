@@ -23,7 +23,7 @@ st.sidebar.header("🔧 Settings")
 # File upload option
 enable_upload = st.sidebar.checkbox("Use File Uploader (GeoTIFF .tif)", value=False)
 
-# When uploading or selecting files, only .tif/.tiff GeoTIFFs are supported
+data_dir = 'data'  # Folder for .tif/.tiff files
 
 # Threshold parameters
 water_thresh = st.sidebar.slider(
