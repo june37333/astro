@@ -25,16 +25,7 @@ st.title("🌌 Mars Surface Habitability Estimator")
 # ---------------------------------
 st.sidebar.header("🔧 Settings")
 
-# Select file from data/ directory
-files = [f for f in os.listdir(data_dir)
-         if f.lower().endswith(('.img', '.tif', '.tiff'))]
-if not files:
-    st.sidebar.info(f"Place a .img/.tif CRISM file into the '{data_dir}' folder.")
-    st.stop()
-selected_file = st.sidebar.selectbox("Select CRISM File", files)
-file_path = os.path.join(data_dir, selected_file)
 
-# Threshold sliders
 water_thresh = st.sidebar.slider(
     "Water Ratio Threshold (NIR/SWIR)", 0.0, 2.0, 0.6, 0.01
 )
