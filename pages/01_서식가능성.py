@@ -1,6 +1,7 @@
 import streamlit as st
 import rasterio
 from rasterio.plot import reshape_as_image
+from rasterio.io import MemoryFile
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -25,30 +26,50 @@ st.title("🌌 Mars Surface Habitability Estimator")
 # ---------------------------------
 st.sidebar.header("🔧 Settings")
 
+# File upload or directory selection
+use_upload = st.sidebar.checkbox("Use File Uploader", value=False)
+if use_upload:
+    uploaded = st.sidebar.file_uploader(
+        "Upload CRISM GeoTIFF (.img/.tif/.tiff)",
+        type=['img','tif','tiff']
+    )
+    if not uploaded:
+        st.warning("Please upload a CRISM image file.")
+        st.stop()
+    memfile = MemoryFile(uploaded.read())
+    src = memfile.open()
+else:
+    files = [f for f in os.listdir(data_dir) if f.lower().endswith(('.img','.tif','.tiff'))]
+    if not files:
+        st.warning(f"No .img/.tif files found in '{data_dir}' folder.\n" +
+                   "Either upload via uploader or place file in data/.")
+        st.stop()
+    selected = st.sidebar.selectbox("Select CRISM File", files)
+    file_path = os.path.join(data_dir, selected)
+    try:
+        src = rasterio.open(file_path)
+    except Exception as e:
+        st.error(f"Failed to open file from data/: {e}")
+        st.stop()
 
+# ---------------------------------
+# Threshold sliders
+# ---------------------------------
 water_thresh = st.sidebar.slider(
     "Water Ratio Threshold (NIR/SWIR)", 0.0, 2.0, 0.6, 0.01
 )
 salt_thresh = st.sidebar.slider(
     "Salt Ratio Threshold (SWIR/Blue)", 0.0, 2.0, 0.5, 0.01
 )
-# Weights
 w_water = st.sidebar.slider("Water Score Weight", 0.0, 1.0, 0.6, 0.05)
 w_salt = 1.0 - w_water
-# Overlay transparency
 alpha = st.sidebar.slider("Overlay Transparency", 0.0, 1.0, 0.5, 0.05)
 
 # ---------------------------------
 # Load and Validate Image
 # ---------------------------------
-try:
-    src = rasterio.open(file_path)
-except Exception as e:
-    st.error(f"Failed to open file: {e}")
-    st.stop()
 img = reshape_as_image(src.read())
 src.close()
-
 # Ensure at least 5 bands
 if img.ndim != 3 or img.shape[2] < 5:
     st.error("Image must have at least 5 bands: B, G, R, NIR, SWIR.")
@@ -67,7 +88,6 @@ def safe_div(a, b):
 water_ratio = safe_div(nir, swir)
 salt_ratio  = safe_div(swir, blue)
 
-# Habitability score [0-100]
 habit_score = (water_ratio > water_thresh).astype(float) * w_water + \
               (salt_ratio < salt_thresh).astype(float) * w_salt
 habit_pct = (habit_score * 100).astype(np.uint8)
@@ -76,11 +96,9 @@ habit_pct = (habit_score * 100).astype(np.uint8)
 # Visualization
 # ---------------------------------
 col1, col2 = st.columns(2)
-
 with col1:
     st.subheader("Original RGB Preview")
     st.image(img[:, :, :3], use_column_width=True)
-
 with col2:
     st.subheader("Habitability Score Map")
     fig, ax = plt.subplots(figsize=(6,6))
@@ -113,8 +131,8 @@ st.write(f"Min: {min_v}%, Max: {max_v}%")
 st.markdown("---")
 st.markdown("""
 **GitHub Setup & Deployment:**  
-1. Place your CRISM .img/.tif into the `data/` folder.  
-2. Add `app.py` and `requirements.txt` to your repo root.  
+1. Add `app.py` and `requirements.txt` to your repo root.  
+2. Place CRISM .img/.tif files in `data/` or upload via uploader.  
 3. Commit & push to GitHub.  
 4. Deploy via Streamlit Cloud.
 """)
