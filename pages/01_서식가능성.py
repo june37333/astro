@@ -125,13 +125,13 @@ st.write(f"Min: {min_score}%, Max: {max_score}%")
 # Footer: GitHub & Deployment Guide
 # ---------------------------------
 st.markdown("---")
-st.markdown(
-    "**GitHub Setup & Deployment:**  
-    1. Add `app.py`, `requirements.txt` to repo root.  
-    2. Create `data/` folder for default image files.  
-    3. Commit & push.  
-    4. Deploy via Streamlit Cloud for live URL."
-)
+st.markdown("""
+**GitHub Setup & Deployment:**  
+1. Add `app.py` and `requirements.txt` to your repository root.  
+2. Create a `data/` folder and place your CRISM `.img` or `.tif` files there.  
+3. Commit and push your changes to GitHub.  
+4. Link your repository in Streamlit Cloud for live deployment.
+""")
 
 # ---------------------------------
 # requirements.txt content:
