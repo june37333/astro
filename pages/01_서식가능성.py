@@ -4,6 +4,7 @@ from rasterio.plot import reshape_as_image
 from rasterio.io import MemoryFile
 import numpy as np
 import matplotlib.pyplot as plt
+import tempfile
 import os
 
 # ---------------------------------
@@ -36,14 +37,29 @@ if use_upload:
     if not uploaded:
         st.warning("Please upload a .img, .tif, or .tiff file.")
         st.stop()
-    # Read via MemoryFile
-    memfile = MemoryFile(uploaded.read())
-    try:
-        src = memfile.open()
-    except Exception as e:
-        st.error(f"Failed to open uploaded file: {e}")
-        st.stop()
+    # Handle uploaded file based on extension
+    _, ext = os.path.splitext(uploaded.name)
+    ext = ext.lower()
+    if ext == '.img':
+        # Write to temp file for rasterio to open
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.img')
+        tmp.write(uploaded.getbuffer())
+        tmp.flush()
+        try:
+            src = rasterio.open(tmp.name)
+        except Exception as e:
+            st.error(f"Failed to open uploaded .img file: {e}")
+            st.stop()
+    else:
+        # Use MemoryFile for GeoTIFF
+        memfile = MemoryFile(uploaded.read())
+        try:
+            src = memfile.open()
+        except Exception as e:
+            st.error(f"Failed to open uploaded file: {e}")
+            st.stop()
 else:
+    # Directory selection
     files = [f for f in os.listdir(data_dir)
              if f.lower().endswith(('.img', '.tif', '.tiff'))]
     if not files:
