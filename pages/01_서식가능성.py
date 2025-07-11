@@ -1,13 +1,18 @@
 import streamlit as st
 import rasterio
 from rasterio.plot import reshape_as_image
-from rasterio.io import MemoryFile
 import numpy as np
 import matplotlib.pyplot as plt
 import os
 
 # ---------------------------------
-# App Configuration
+# Ensure data directory exists
+# ---------------------------------
+data_dir = 'data'
+os.makedirs(data_dir, exist_ok=True)
+
+# ---------------------------------
+# Streamlit App Configuration
 # ---------------------------------
 st.set_page_config(
     page_title="Mars Habitability Mapper",
@@ -20,53 +25,42 @@ st.title("🌌 Mars Surface Habitability Estimator")
 # ---------------------------------
 st.sidebar.header("🔧 Settings")
 
-# File upload option
-enable_upload = st.sidebar.checkbox("Use File Uploader (GeoTIFF .tif)", value=False)
+# Select file from data/ directory
+files = [f for f in os.listdir(data_dir)
+         if f.lower().endswith(('.img', '.tif', '.tiff'))]
+if not files:
+    st.sidebar.info(f"Place a .img/.tif CRISM file into the '{data_dir}' folder.")
+    st.stop()
+selected_file = st.sidebar.selectbox("Select CRISM File", files)
+file_path = os.path.join(data_dir, selected_file)
 
-data_dir = 'data'  # Folder for .tif/.tiff files
-
-# Threshold parameters
+# Threshold sliders
 water_thresh = st.sidebar.slider(
     "Water Ratio Threshold (NIR/SWIR)", 0.0, 2.0, 0.6, 0.01
 )
 salt_thresh = st.sidebar.slider(
     "Salt Ratio Threshold (SWIR/Blue)", 0.0, 2.0, 0.5, 0.01
 )
+# Weights
 w_water = st.sidebar.slider("Water Score Weight", 0.0, 1.0, 0.6, 0.05)
 w_salt = 1.0 - w_water
+# Overlay transparency
 alpha = st.sidebar.slider("Overlay Transparency", 0.0, 1.0, 0.5, 0.05)
 
 # ---------------------------------
-# Load Image
+# Load and Validate Image
 # ---------------------------------
-if enable_upload:
-    uploaded = st.sidebar.file_uploader(
-        "Upload CRISM Map-Projected Image (.img/.tif)",
-        type=['img','tif','tiff']
-    )
-    if not uploaded:
-        st.warning("Please upload a CRISM image to proceed.")
-        st.stop()
-    # Read via MemoryFile
-    mem = MemoryFile(uploaded.read())
-    src = mem.open()
-else:
-    # Select from data/ folder
-    files = [f for f in os.listdir(data_dir)
-             if f.lower().endswith(('.img','.tif','.tiff'))]
-    if not files:
-        st.warning(f"No .img/.tif files in '{data_dir}' folder.")
-        st.stop()
-    selected = st.sidebar.selectbox("Select CRISM File", files)
-    src = rasterio.open(os.path.join(data_dir, selected))
-
-# Read full image
-img = reshape_as_image(src.read())  # H x W x C
+try:
+    src = rasterio.open(file_path)
+except Exception as e:
+    st.error(f"Failed to open file: {e}")
+    st.stop()
+img = reshape_as_image(src.read())
 src.close()
 
-# Validate bands
+# Ensure at least 5 bands
 if img.ndim != 3 or img.shape[2] < 5:
-    st.error("Image must have at least 5 bands: B,G,R,NIR,SWIR.")
+    st.error("Image must have at least 5 bands: B, G, R, NIR, SWIR.")
     st.stop()
 
 # ---------------------------------
@@ -128,8 +122,8 @@ st.write(f"Min: {min_v}%, Max: {max_v}%")
 st.markdown("---")
 st.markdown("""
 **GitHub Setup & Deployment:**  
-1. Add `app.py` and `requirements.txt` to your repo root.  
-2. Create `data/` folder for default .img/.tif files.  
+1. Place your CRISM .img/.tif into the `data/` folder.  
+2. Add `app.py` and `requirements.txt` to your repo root.  
 3. Commit & push to GitHub.  
 4. Deploy via Streamlit Cloud.
 """)
