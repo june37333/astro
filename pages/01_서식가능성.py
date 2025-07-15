@@ -1,174 +1,92 @@
 import streamlit as st
 import rasterio
-from rasterio.plot import reshape_as_image
-from rasterio.io import MemoryFile
 import numpy as np
 import matplotlib.pyplot as plt
 import tempfile
 import os
 
-# ---------------------------------
-# Ensure data directory exists
-# ---------------------------------
-data_dir = 'data'
-os.makedirs(data_dir, exist_ok=True)
+# 1. CRISM MTRDR 파일 로드 함수 (.img + .hdr 지원)
+def load_crism(files):
+    # 임시 디렉토리 생성
+    tmp_dir = tempfile.mkdtemp()
+    img_path = None
+    # 업로드된 파일들 저장
+    for uploaded in files:
+        suffix = os.path.splitext(uploaded.name)[1]
+        out_path = os.path.join(tmp_dir, uploaded.name)
+        with open(out_path, "wb") as f:
+            f.write(uploaded.read())
+        # .img 파일 경로 기록
+        if suffix.lower() == ".img":
+            img_path = out_path
+    if img_path is None:
+        st.error(".img 파일이 필요합니다.")
+        return None, None
+    # rasterio로 .img 파일 열기 (.hdr가 같은 디렉토리에 있어야 함)
+    dataset = rasterio.open(img_path)
+    data = dataset.read()  # shape: (bands, rows, cols)
+    return dataset, data
 
-# ---------------------------------
-# Streamlit App Configuration
-# ---------------------------------
-st.set_page_config(
-    page_title="Mars Habitability Mapper",
-    layout="wide"
-)
-st.title("🌌 Mars Surface Habitability Estimator")
-
-# ---------------------------------
-# Sidebar: Controls
-# ---------------------------------
-st.sidebar.header("🔧 Settings")
-
-# File upload or directory selection
-use_upload = st.sidebar.checkbox("Use File Uploader", value=False)
-if use_upload:
-    uploaded = st.sidebar.file_uploader(
-        "Upload CRISM Image (.img/.tif/.tiff)",
-        type=['img', 'tif', 'tiff']
-    )
-    if not uploaded:
-        st.warning("Please upload a .img, .tif, or .tiff file.")
-        st.stop()
-    # Handle uploaded file based on extension
-    _, ext = os.path.splitext(uploaded.name)
-    ext = ext.lower()
-    if ext == '.img':
-        # Write to temp file for rasterio to open
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.img')
-        tmp.write(uploaded.getbuffer())
-        tmp.flush()
-        try:
-            src = rasterio.open(tmp.name)
-        except Exception as e:
-            st.error(f"Failed to open uploaded .img file: {e}")
-            st.stop()
-    else:
-        # Use MemoryFile for GeoTIFF
-        memfile = MemoryFile(uploaded.read())
-        try:
-            src = memfile.open()
-        except Exception as e:
-            st.error(f"Failed to open uploaded file: {e}")
-            st.stop()
-else:
-    # Directory selection
-    files = [f for f in os.listdir(data_dir)
-             if f.lower().endswith(('.img', '.tif', '.tiff'))]
-    if not files:
-        st.warning(
-            f"No .img/.tif/.tiff files found in '{data_dir}'.\n"
-            "Please upload via uploader or place file in data/."
-        )
-        st.stop()
-    selected = st.sidebar.selectbox("Select CRISM File", files)
-    file_path = os.path.join(data_dir, selected)
-    try:
-        src = rasterio.open(file_path)
-    except Exception as e:
-        st.error(f"Failed to open file from data/: {e}")
-        st.stop()
-
-# ---------------------------------
-# Threshold sliders
-# ---------------------------------
-water_thresh = st.sidebar.slider(
-    "Water Ratio Threshold (NIR/SWIR)", 0.0, 2.0, 0.6, 0.01
-)
-salt_thresh = st.sidebar.slider(
-    "Salt Ratio Threshold (SWIR/Blue)", 0.0, 2.0, 0.5, 0.01
-)
-w_water = st.sidebar.slider("Water Score Weight", 0.0, 1.0, 0.6, 0.05)
-w_salt = 1.0 - w_water
-alpha = st.sidebar.slider("Overlay Transparency", 0.0, 1.0, 0.5, 0.05)
-
-# ---------------------------------
-# Load and Validate Image
-# ---------------------------------
-try:
-    img = reshape_as_image(src.read())
-finally:
-    src.close()
-
-# Ensure at least 5 bands
-if img.ndim != 3 or img.shape[2] < 5:
-    st.error("Image must have at least 5 bands: B, G, R, NIR, SWIR.")
-    st.stop()
-
-# ---------------------------------
-# Compute Indices
-# ---------------------------------
-blue = img[:, :, 2].astype(float)
-nir  = img[:, :, 3].astype(float)
-swir = img[:, :, 4].astype(float)
-
-def safe_div(a, b):
-    return np.divide(a, b, out=np.zeros_like(a), where=b>0)
-
-water_ratio = safe_div(nir, swir)
-salt_ratio  = safe_div(swir, blue)
-
-# Habitability score [0-100]
-habit_score = (water_ratio > water_thresh).astype(float) * w_water + \
-              (salt_ratio < salt_thresh).astype(float) * w_salt
-habit_pct = (habit_score * 100).astype(np.uint8)
-
-# ---------------------------------
-# Visualization
-# ---------------------------------
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("Original RGB Preview")
-    st.image(img[:, :, :3], use_column_width=True)
-with col2:
-    st.subheader("Habitability Score Map")
-    fig, ax = plt.subplots(figsize=(6,6))
-    im = ax.imshow(habit_pct, cmap='viridis', vmin=0, vmax=100)
+# 2. 시각화 함수 (예시: RGB 합성)
+def visualize(data):
+    # 밴드 인덱스는 CRISM wavelength에 따라 조정 필요 (1-based -> 0-based)
+    band_r, band_g, band_b = 10, 30, 50
+    rgb = np.stack([data[band_r-1], data[band_g-1], data[band_b-1]], axis=2)
+    fig, ax = plt.subplots()
+    ax.imshow(rgb)
     ax.axis('off')
-    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label('Habitability (%)')
     st.pyplot(fig)
 
-st.subheader("Overlay: Original + Habitability")
-fig2, ax2 = plt.subplots(figsize=(8,8))
-ax2.imshow(img[:, :, :3])
-ax2.imshow(habit_pct, cmap='viridis', alpha=alpha, vmin=0, vmax=100)
-ax2.axis('off')
-st.pyplot(fig2)
+# 3. 수분/염분 지표 계산 함수
+def analyze_h2o_salt(data):
+    # 예시: 수분 흡수 밴드, 염분 흡수 밴드 인덱스 (조정 필요)
+    h2o_band = 100
+    salt_band = 150
+    h2o_ref = data[h2o_band-1].astype(float)
+    salt_ref = data[salt_band-1].astype(float)
+    # 간단한 평균 반사율 지표
+    h2o_index = np.nanmean(h2o_ref)
+    salt_index = np.nanmean(salt_ref)
+    return h2o_index, salt_index
 
-# ---------------------------------
-# Statistics
-# ---------------------------------
-st.subheader("Habitability Statistics")
-avg = habit_pct.mean()
-st.metric("Average Habitability", f"{avg:.2f}%")
-min_v = int(habit_pct.min())
-max_v = int(habit_pct.max())
-st.write(f"Min: {min_v}%, Max: {max_v}%")
+# 4. 생존 가능성 확률 계산 함수
+def calculate_habitability(h2o_idx, salt_idx):
+    # 로지스틱 모델 기반 (임의 기준치: 0.5)
+    h2o_score = 1 / (1 + np.exp(- (h2o_idx - 0.5)))
+    salt_score = 1 / (1 + np.exp(salt_idx - 0.5))
+    # 가중 평균: 수분 0.6, 염분 0.4
+    prob = 0.6 * h2o_score + 0.4 * (1 - salt_score)
+    return prob
 
-# ---------------------------------
-# Footer: GitHub & Deployment Guide
-# ---------------------------------
-st.markdown("---")
-st.markdown("""
-**GitHub Setup & Deployment:**  
-1. Add `app.py` and `requirements.txt` to your repo root.  
-2. Place CRISM .img/.tif files in `data/` or upload via uploader.  
-3. Commit & push to GitHub.  
-4. Deploy via Streamlit Cloud.
-""")
+# Streamlit 앱 메인 함수
+def main():
+    st.title('CRISM MTRDR Viewer & Habitability Estimator')
+    st.markdown('CRISM hyperspectral 데이터로부터 수분/염분 지표 및 생존 확률을 계산합니다.\n
+    .img 파일과 .hdr 파일을 함께 업로드해주세요.')
+    uploaded_files = st.file_uploader(
+        'CRISM MTRDR 파일 업로드 (.img + .hdr)',
+        type=['img', 'hdr'],
+        accept_multiple_files=True
+    )
 
-# ---------------------------------
-# requirements.txt:
-# streamlit
-# rasterio
-# numpy
-# matplotlib
-# ---------------------------------
+    if uploaded_files and len(uploaded_files) >= 2:
+        dataset, data = load_crism(uploaded_files)
+        if dataset is None:
+            return
+
+        st.header('1. 데이터 시각화')
+        visualize(data)
+
+        st.header('2. 수분/염분 지표 분석')
+        h2o_idx, salt_idx = analyze_h2o_salt(data)
+        st.write(f'- 수분 지표 (H2O Index): {h2o_idx:.3f}')
+        st.write(f'- 염분 지표 (Salt Index): {salt_idx:.3f}')
+
+        st.header('3. 생존 가능성 확률')
+        prob = calculate_habitability(h2o_idx, salt_idx)
+        st.write(f'- 예상 생존 가능성 확률: **{prob * 100:.2f}%**')
+    else:
+        st.info('*.img* 파일과 해당하는 *.hdr* 파일을 함께 업로드하세요.')
+
+if __name__ == '__main__':
+    main()
