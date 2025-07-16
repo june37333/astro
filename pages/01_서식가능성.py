@@ -119,9 +119,14 @@ CRISM MTRDR 데이터를 업로드하면:
 
     # 3. 임계치 및 마스크
     st.header('3. Threshold & Mask')
-    thr_h2o = st.slider('Hydration Threshold', 0.6, 2.0, 1.1, 0.01)
-    thr_salt = st.slider('Salt Threshold', 0.3, 1.5, 0.6, 0.01)
-    mask = habitability_mask(hydration, salt_ratio, thr_h2o, thr_salt)
+    # Hydration: 최소값을 넘어야 함
+    thr_h2o = st.slider('Hydration Minimum Threshold', 0.6, 2.0, 1.1, 0.01,
+                        help='Hydration ratio이 이 값 이상인 픽셀만 선택')
+    # Salt: 특정 구간 내에 있어야 함
+    thr_salt = st.slider('Salt Acceptable Range', 0.3, 1.5, (0.3, 0.6), 0.01,
+                         help='Salt ratio이 이 범위 내에 있는 픽셀만 선택')
+    # 임계치 적용: hydration >= thr_h2o, thr_salt[0] <= salt_ratio <= thr_salt[1]
+    mask = (hydration >= thr_h2o) & (salt_ratio >= thr_salt[0]) & (salt_ratio <= thr_salt[1])
     fig3, ax3 = plt.subplots()
     ax3.imshow(mask, cmap='gray')
     ax3.set_title('Survivability Mask')
