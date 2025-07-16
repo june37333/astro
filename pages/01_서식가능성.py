@@ -56,18 +56,14 @@ def visualize(data):
     st.pyplot(fig)
 
 # 3. 수분/염분 지표 계산 및 맵 생성 함수
-# 밴드 맵은 원본 데이터 사용
-def compute_indices(data):
-    n_bands = data.shape[0]
-    h2o_band = min(100, n_bands)
-    salt_band = min(150, n_bands)
+# 원본 데이터와 사용자가 선택한 밴드로 맵 생성
 
+def compute_indices(data, h2o_band, salt_band):
     h2o_map = data[h2o_band-1]
     salt_map = data[salt_band-1]
     h2o_idx = np.nanmean(h2o_map)
     salt_idx = np.nanmean(salt_map)
-
-    return h2o_map, salt_map, h2o_idx, salt_idx, h2o_band, salt_band
+    return h2o_map, salt_map, h2o_idx, salt_idx
 
 # 4. 생존 가능성 확률 계산(픽셀 단위)
 def habitability_map(h2o_map, salt_map):
@@ -82,7 +78,7 @@ def main():
 CRISM hyperspectral 파일(.img + .hdr)을 업로드하면:
 
 1. 원본 기반 RGB 시각화
-2. 수분/염분 지표 맵 및 평균값
+2. 수분/염분 지표 맵 및 평균값 (사용자 선택 밴드)
 3. 픽셀 단위 생존 확률 맵 및 임계치 비교
 """)
 
@@ -95,15 +91,21 @@ CRISM hyperspectral 파일(.img + .hdr)을 업로드하면:
     if dataset is None:
         return
 
+    n_bands = data.shape[0]
+
     # 1. 시각화
     st.header('1. 원본 기반 RGB 시각화')
     visualize(data)
 
-    # 2. 수분/염분 지표
-    st.header('2. 수분/염분 지표 맵')
-    h2o_map, salt_map, h2o_idx, salt_idx, h2o_band, salt_band = compute_indices(data)
+    # 2. 수분/염분 지표 (밴드 선택)
+    st.header('2. 수분/염분 지표 맵 (밴드 선택)')
+    st.sidebar.header('Index 밴드 선택')
+    h2o_band = st.sidebar.slider('H2O Index 밴드', 1, n_bands, min(100, n_bands))
+    salt_band = st.sidebar.slider('Salt Index 밴드', 1, n_bands, min(150, n_bands))
+
+    h2o_map, salt_map, h2o_idx, salt_idx = compute_indices(data, h2o_band, salt_band)
     col1, col2 = st.columns(2)
-    # H2O 맵 컬러 스트레칭 및 컬러맵 적용
+    # H2O 맵
     with col1:
         fig1, ax1 = plt.subplots()
         vmin1, vmax1 = np.percentile(h2o_map, 2), np.percentile(h2o_map, 98)
@@ -113,7 +115,7 @@ CRISM hyperspectral 파일(.img + .hdr)을 업로드하면:
         fig1.colorbar(cax1, ax=ax1, fraction=0.046, pad=0.04)
         st.pyplot(fig1)
         st.write(f'- 평균 H2O 지표: {h2o_idx:.3f}')
-    # Salt 맵 컬러 스트레칭 및 컬러맵 적용
+    # Salt 맵
     with col2:
         fig2, ax2 = plt.subplots()
         vmin2, vmax2 = np.percentile(salt_map, 2), np.percentile(salt_map, 98)
@@ -124,11 +126,11 @@ CRISM hyperspectral 파일(.img + .hdr)을 업로드하면:
         st.pyplot(fig2)
         st.write(f'- 평균 Salt 지표: {salt_idx:.3f}')
 
-    # 3. 생존 확률 및 임계치 적용
+    # 3. 생존 확률 맵 및 임계치 비교
     st.header('3. 생존 확률 맵 & 임계치 비교')
     prob_map = habitability_map(h2o_map, salt_map)
-    thresh_h2o = st.slider('Water Threshold', float(h2o_map.min()), float(h2o_map.max()), 0.75)
-    thresh_salt = st.slider('Salt Threshold', float(salt_map.min()), float(salt_map.max()), 0.20)
+    thresh_h2o = st.slider('Water Threshold', float(h2o_map.min()), float(h2o_map.max()), float(np.median(h2o_map)))
+    thresh_salt = st.slider('Salt Threshold', float(salt_map.min()), float(salt_map.max()), float(np.median(salt_map)))
     fig3, ax3 = plt.subplots()
     cax3 = ax3.imshow(prob_map, cmap='viridis')
     ax3.set_title('생존 확률 맵')
@@ -142,9 +144,4 @@ CRISM hyperspectral 파일(.img + .hdr)을 업로드하면:
 
 if __name__ == '__main__':
     main()
-
-# requirements.txt:
-# streamlit
-# rasterio
-# numpy
-# matplotlib
+    main()
