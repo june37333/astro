@@ -1,3 +1,10 @@
+# app.py
+# requirements.txt 예시:
+# streamlit
+# rasterio
+# numpy
+# matplotlib
+
 import streamlit as st
 import rasterio
 import numpy as np
@@ -7,88 +14,86 @@ import os
 
 # 1. CRISM MTRDR 파일 로드 함수 (.img + .hdr 지원)
 def load_crism(files):
-    # 임시 디렉토리 생성
     tmp_dir = tempfile.mkdtemp()
     img_path = None
-    # 업로드된 파일들 저장
     for uploaded in files:
         suffix = os.path.splitext(uploaded.name)[1]
         out_path = os.path.join(tmp_dir, uploaded.name)
         with open(out_path, "wb") as f:
             f.write(uploaded.read())
-        # .img 파일 경로 기록
         if suffix.lower() == ".img":
             img_path = out_path
     if img_path is None:
         st.error(".img 파일이 필요합니다.")
         return None, None
-    # rasterio로 .img 파일 열기 (.hdr가 같은 디렉토리에 있어야 함)
     dataset = rasterio.open(img_path)
-    data = dataset.read()  # shape: (bands, rows, cols)
+    data = dataset.read()
     return dataset, data
 
-# 2. 시각화 함수 (예시: RGB 합성)
+# 2. 시각화 함수 (동적으로 R/G/B 밴드 선택)
 def visualize(data):
-    # 밴드 인덱스는 CRISM wavelength에 따라 조정 필요 (1-based -> 0-based)
-    band_r, band_g, band_b = 10, 30, 50
-    rgb = np.stack([data[band_r-1], data[band_g-1], data[band_b-1]], axis=2)
+    n_bands = data.shape[0]
+    if n_bands < 3:
+        st.error(f"밴드 수가 {n_bands}개로 RGB 합성이 불가능합니다.")
+        return
+    st.sidebar.header('시각화 옵션')
+    default_r, default_g, default_b = 1, n_bands//2, n_bands
+    r = st.sidebar.slider('Red 밴드', 1, n_bands, default_r)
+    g = st.sidebar.slider('Green 밴드', 1, n_bands, default_g)
+    b = st.sidebar.slider('Blue 밴드', 1, n_bands, default_b)
+    rgb = np.stack([data[r-1], data[g-1], data[b-1]], axis=2)
     fig, ax = plt.subplots()
     ax.imshow(rgb)
+    ax.set_title(f"RGB 합성 (R={r}, G={g}, B={b})")
     ax.axis('off')
     st.pyplot(fig)
 
 # 3. 수분/염분 지표 계산 함수
-# 밴드 인덱스가 데이터 범위를 벗어나지 않도록 검사 추가
 def analyze_h2o_salt(data):
     n_bands = data.shape[0]
-    # 예시: 수분 염분 밴드 번호. 데이터에 맞춰 조정 필요
+    # 최대 밴드 범위 내에서 선택
     h2o_band = min(100, n_bands)
     salt_band = min(150, n_bands)
-    h2o_ref = data[h2o_band-1].astype(float)
-    salt_ref = data[salt_band-1].astype(float)
-    h2o_index = np.nanmean(h2o_ref)
-    salt_index = np.nanmean(salt_ref)
-    return h2o_index, salt_index, h2o_band, salt_band
+    h2o_idx = np.nanmean(data[h2o_band-1].astype(float))
+    salt_idx = np.nanmean(data[salt_band-1].astype(float))
+    return h2o_idx, salt_idx, h2o_band, salt_band
 
 # 4. 생존 가능성 확률 계산 함수
 def calculate_habitability(h2o_idx, salt_idx):
-    h2o_score = 1 / (1 + np.exp(- (h2o_idx - 0.5)))
+    h2o_score = 1 / (1 + np.exp(-(h2o_idx - 0.5)))
     salt_score = 1 / (1 + np.exp(salt_idx - 0.5))
-    prob = 0.6 * h2o_score + 0.4 * (1 - salt_score)
-    return prob
+    return 0.6 * h2o_score + 0.4 * (1 - salt_score)
 
-# Streamlit 앱 메인 함수
+# 메인 함수
 def main():
     st.title('CRISM MTRDR Viewer & Habitability Estimator')
     st.markdown("""
-CRISM hyperspectral 데이터로부터 수분/염분 지표 및 생존 확률을 계산합니다.
-.img 파일과 .hdr 파일을 함께 업로드해주세요.
+CRISM hyperspectral 파일(.img + .hdr)을 업로드하면:
+
+1. 동적 RGB 합성 시각화
+2. 수분/염분 지표 계산
+3. 생존 가능성 확률 제공
 """)
-    uploaded_files = st.file_uploader(
-        'CRISM MTRDR 파일 업로드 (.img + .hdr)',
-        type=['img', 'hdr'],
-        accept_multiple_files=True
-    )
+    files = st.file_uploader('파일 업로드', type=['img', 'hdr'], accept_multiple_files=True)
+    if not files or len(files) < 2:
+        st.info('*.img* 파일과 대응하는 *.hdr* 파일을 함께 업로드하세요.')
+        return
 
-    if uploaded_files and len(uploaded_files) >= 2:
-        dataset, data = load_crism(uploaded_files)
-        if dataset is None:
-            return
+    dataset, data = load_crism(files)
+    if dataset is None:
+        return
 
-        st.sidebar.header('시각화 옵션')
-        st.header('1. 데이터 시각화')
-        visualize(data)
+    st.header('1. 데이터 시각화')
+    visualize(data)
 
-        st.header('2. 수분/염분 지표 분석')
-        h2o_idx, salt_idx, h2o_band, salt_band = analyze_h2o_salt(data)
-        st.write(f'- 수분 지표 (H2O Index, 밴드 {h2o_band}): {h2o_idx:.3f}')
-        st.write(f'- 염분 지표 (Salt Index, 밴드 {salt_band}): {salt_idx:.3f}')
+    st.header('2. 수분/염분 지표 분석')
+    h2o_idx, salt_idx, h2o_band, salt_band = analyze_h2o_salt(data)
+    st.write(f"• H2O 인덱스 (밴드 {h2o_band}): {h2o_idx:.3f}")
+    st.write(f"• Salt 인덱스 (밴드 {salt_band}): {salt_idx:.3f}")
 
-        st.header('3. 생존 가능성 확률')
-        prob = calculate_habitability(h2o_idx, salt_idx)
-        st.write(f'- 예상 생존 가능성 확률: **{prob * 100:.2f}%**')
-    else:
-        st.info('*.img* 파일과 해당하는 *.hdr* 파일을 함께 업로드하세요.')
+    st.header('3. 생존 가능성 확률')
+    prob = calculate_habitability(h2o_idx, salt_idx)
+    st.write(f"**생존 가능성: {prob*100:.2f}%**")
 
 if __name__ == '__main__':
     main()
