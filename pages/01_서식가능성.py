@@ -38,23 +38,22 @@ def visualize(data):
     st.pyplot(fig)
 
 # 3. 수분/염분 지표 계산 함수
+# 밴드 인덱스가 데이터 범위를 벗어나지 않도록 검사 추가
 def analyze_h2o_salt(data):
-    # 예시: 수분 흡수 밴드, 염분 흡수 밴드 인덱스 (조정 필요)
-    h2o_band = 100
-    salt_band = 150
+    n_bands = data.shape[0]
+    # 예시: 수분 염분 밴드 번호. 데이터에 맞춰 조정 필요
+    h2o_band = min(100, n_bands)
+    salt_band = min(150, n_bands)
     h2o_ref = data[h2o_band-1].astype(float)
     salt_ref = data[salt_band-1].astype(float)
-    # 간단한 평균 반사율 지표
     h2o_index = np.nanmean(h2o_ref)
     salt_index = np.nanmean(salt_ref)
-    return h2o_index, salt_index
+    return h2o_index, salt_index, h2o_band, salt_band
 
 # 4. 생존 가능성 확률 계산 함수
 def calculate_habitability(h2o_idx, salt_idx):
-    # 로지스틱 모델 기반 (임의 기준치: 0.5)
     h2o_score = 1 / (1 + np.exp(- (h2o_idx - 0.5)))
     salt_score = 1 / (1 + np.exp(salt_idx - 0.5))
-    # 가중 평균: 수분 0.6, 염분 0.4
     prob = 0.6 * h2o_score + 0.4 * (1 - salt_score)
     return prob
 
@@ -70,18 +69,20 @@ CRISM hyperspectral 데이터로부터 수분/염분 지표 및 생존 확률을
         type=['img', 'hdr'],
         accept_multiple_files=True
     )
+
     if uploaded_files and len(uploaded_files) >= 2:
         dataset, data = load_crism(uploaded_files)
         if dataset is None:
             return
 
+        st.sidebar.header('시각화 옵션')
         st.header('1. 데이터 시각화')
         visualize(data)
 
         st.header('2. 수분/염분 지표 분석')
-        h2o_idx, salt_idx = analyze_h2o_salt(data)
-        st.write(f'- 수분 지표 (H2O Index): {h2o_idx:.3f}')
-        st.write(f'- 염분 지표 (Salt Index): {salt_idx:.3f}')
+        h2o_idx, salt_idx, h2o_band, salt_band = analyze_h2o_salt(data)
+        st.write(f'- 수분 지표 (H2O Index, 밴드 {h2o_band}): {h2o_idx:.3f}')
+        st.write(f'- 염분 지표 (Salt Index, 밴드 {salt_band}): {salt_idx:.3f}')
 
         st.header('3. 생존 가능성 확률')
         prob = calculate_habitability(h2o_idx, salt_idx)
