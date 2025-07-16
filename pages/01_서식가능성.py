@@ -61,14 +61,15 @@ def calculate_habitability(h2o_idx, salt_idx):
 # Streamlit 앱 메인 함수
 def main():
     st.title('CRISM MTRDR Viewer & Habitability Estimator')
-    st.markdown('CRISM hyperspectral 데이터로부터 수분/염분 지표 및 생존 확률을 계산합니다.\n
-    .img 파일과 .hdr 파일을 함께 업로드해주세요.')
+    st.markdown("""
+CRISM hyperspectral 데이터로부터 수분/염분 지표 및 생존 확률을 계산합니다.
+.img 파일과 .hdr 파일을 함께 업로드해주세요.
+""")
     uploaded_files = st.file_uploader(
         'CRISM MTRDR 파일 업로드 (.img + .hdr)',
         type=['img', 'hdr'],
         accept_multiple_files=True
     )
-
     if uploaded_files and len(uploaded_files) >= 2:
         dataset, data = load_crism(uploaded_files)
         if dataset is None:
