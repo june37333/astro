@@ -4,3 +4,6 @@ numpy
 rasterio
 matplotlib
 scipy
+streamlit>=1.0
+networkx>=2.6
+matplotlib>=3.4
