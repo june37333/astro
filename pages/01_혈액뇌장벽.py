@@ -8,11 +8,11 @@ def main():
     st.title("BBB Tight Junction Network Simulation under Variable Gravity")
 
     # Sidebar parameters
-    st.sidebar.header("Simulation Parameters")
-    grid_size = st.sidebar.slider("Grid size (nodes per side)", 5, 50, 20)
-    g = st.sidebar.slider("Gravity (g)", 0.0, 1.0, 1.0, step=0.01)
-    p0 = st.sidebar.slider("Base edge loss probability (p0)", 0.0, 1.0, 0.1, step=0.01)
-    alpha = st.sidebar.slider("Gravity dependency α", 0.0, 2.0, 1.0, step=0.01)
+    st.sidebar.header("시뮬레이션 매개변수")
+    grid_size = st.sidebar.slider("격자 크기 (한 변당 노드 수)", 5, 50, 20)
+    g = st.sidebar.slider("중력가속도 (g)", 0.0, 1.0, 1.0, step=0.01)
+    p0 = st.sidebar.slider("기본 연결선 손실 확률 (p0)", 0.0, 1.0, 0.1, step=0.01)
+    alpha = st.sidebar.slider("중력계수 α", 0.0, 2.0, 1.0, step=0.01)
 
     # Compute edge loss probability
     p_loss = p0 + alpha * (1.0 - g)
